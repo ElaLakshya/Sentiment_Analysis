@@ -32,39 +32,33 @@ def show_pie_chart(category_counts: dict, profile_name: str):
 
     sorted_data   = sorted(category_counts.items(), key=lambda x: x[1], reverse=True)
     labels, sizes = zip(*sorted_data)
-
-    # Merge slices under 3% into "Other"
     total = sum(sizes)
-    main_labels, main_sizes, other = [], [], 0
-    for label, size in zip(labels, sizes):
-        if size / total < 0.03:
-            other += size
-        else:
-            main_labels.append(label)
-            main_sizes.append(size)
-    if other:
-        main_labels.append("Other")
-        main_sizes.append(other)
 
     plt.style.use("dark_background")
     fig, ax = plt.subplots(figsize=(11, 9))
 
-    wedges, _ = ax.pie(
-        main_sizes,
+    # Create number labels for the pie chart slices (1, 2, 3...)
+    slice_numbers = [str(i) for i in range(1, len(labels) + 1)]
+
+    wedges, texts = ax.pie(
+        sizes,
+        labels=slice_numbers,
+        labeldistance=1.05,  # Places the numbers just outside the pie edge
         startangle=140,
         wedgeprops={"edgecolor": "#0d1117", "linewidth": 1.5},
+        textprops={"color": "white", "weight": "bold", "fontsize": 10},
     )
 
-    # Legend: coloured square | category name | percentage
+    # Legend: coloured square | Number. category name | percentage
     legend_labels = [
-        f"{lbl}  ({sz/total*100:.1f}%)"
-        for lbl, sz in zip(main_labels, main_sizes)
+        f"{i}. {lbl}  ({sz/total*100:.1f}%)"
+        for i, (lbl, sz) in enumerate(zip(labels, sizes), start=1)
     ]
     ax.legend(
         wedges, legend_labels,
         loc="upper center",
         bbox_to_anchor=(0.5, -0.02),
-        ncol=2,
+        ncol=1,
         fontsize=9,
         framealpha=0.15,
         labelcolor="white",
@@ -130,6 +124,22 @@ def process_and_analyze(batch_size: int, model_name: str, profile_handle: str) -
     print(f"Analysis done. {ok} successful, {failed} failed.")
     return all_categories
 
+def get_all_categories_for_profile(profile_handle: str) -> list:
+    """Fetches ALL taxonomy categories for a profile from the database, including previously processed ones."""
+    categories = []
+    with db.get_conn() as conn:
+        rows = conn.execute(
+            """SELECT tx.top_level FROM taxonomy tx
+               JOIN tweets t ON tx.tweet_id = t.tweet_id
+               WHERE LOWER(t.profile_handle) = LOWER(?)""",
+            (profile_handle,)
+        ).fetchall()
+        for r in rows:
+            top = r["top_level"]
+            if top and top not in ("Uncategorized", "Arts & Entertainment"):
+                categories.append(top)
+    return categories
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -167,7 +177,7 @@ def main():
 
     # ── Phase 2: Analyze ──────────────────────────────────────────────────────
     print("\n[PHASE 2] Running BitNet analysis (sentiment + entities + taxonomy)...")
-    all_categories = process_and_analyze(
+    process_and_analyze(
         batch_size=args.count,
         model_name=BITNET_MODEL_NAME,
         profile_handle=profile_name,
@@ -175,8 +185,11 @@ def main():
 
     # ── Phase 3: Pie chart ────────────────────────────────────────────────────
     print("\n[PHASE 3] Rendering taxonomy pie chart...")
+    # Fetch from DB so it always has data, even if 0 new tweets were processed
+    all_categories = get_all_categories_for_profile(profile_name)
     counts = Counter(all_categories)
     show_pie_chart(counts, profile_name)
+
 
     # ── Summary ───────────────────────────────────────────────────────────────
     print("\n--- DATABASE STATUS ---")
