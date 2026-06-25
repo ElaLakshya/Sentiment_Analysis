@@ -25,7 +25,7 @@ except ImportError:
 
 
 def show_pie_chart(category_counts: dict, profile_name: str):
-    """Always-on pie chart of taxonomy categories."""
+    """Pie chart with all labels in a legend below — no text on the slices."""
     if not category_counts:
         print("\nNo taxonomy categories to plot.")
         return
@@ -33,8 +33,8 @@ def show_pie_chart(category_counts: dict, profile_name: str):
     sorted_data   = sorted(category_counts.items(), key=lambda x: x[1], reverse=True)
     labels, sizes = zip(*sorted_data)
 
-    # Merge tiny slices (<3%) into "Other" so the chart stays readable
-    total      = sum(sizes)
+    # Merge slices under 3% into "Other"
+    total = sum(sizes)
     main_labels, main_sizes, other = [], [], 0
     for label, size in zip(labels, sizes):
         if size / total < 0.03:
@@ -47,23 +47,32 @@ def show_pie_chart(category_counts: dict, profile_name: str):
         main_sizes.append(other)
 
     plt.style.use("dark_background")
-    fig, ax = plt.subplots(figsize=(11, 8))
+    fig, ax = plt.subplots(figsize=(11, 9))
 
-    wedges, texts, autotexts = ax.pie(
+    wedges, _ = ax.pie(
         main_sizes,
-        labels=main_labels,
-        autopct="%1.1f%%",
         startangle=140,
-        wedgeprops={"edgecolor": "#1a1a2e", "linewidth": 1.5},
-        textprops={"color": "white"},
+        wedgeprops={"edgecolor": "#0d1117", "linewidth": 1.5},
     )
-    plt.setp(autotexts, size=10, weight="bold")
-    plt.setp(texts, size=10)
+
+    # Legend: coloured square | category name | percentage
+    legend_labels = [
+        f"{lbl}  ({sz/total*100:.1f}%)"
+        for lbl, sz in zip(main_labels, main_sizes)
+    ]
+    ax.legend(
+        wedges, legend_labels,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.02),
+        ncol=2,
+        fontsize=9,
+        framealpha=0.15,
+        labelcolor="white",
+    )
 
     ax.set_title(
-        f"Topic Analysis — @{profile_name}\n"
-        f"({total} tweets classified by Google Taxonomy)",
-        fontsize=13, weight="bold", pad=20, color="white"
+        f"Topic Analysis — @{profile_name}\n({total} tweets · Google Taxonomy)",
+        fontsize=13, weight="bold", pad=16, color="white",
     )
     fig.patch.set_facecolor("#0d1117")
     ax.set_facecolor("#0d1117")
